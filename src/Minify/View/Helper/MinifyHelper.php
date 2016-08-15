@@ -1,13 +1,17 @@
 <?php
 namespace Minify\View\Helper;
 
-use Minify;
-use Zend\View\Helper\AbstractHelper;
+use Minify,
+    Minify_Cache_File,
+    Zend\View\Helper\AbstractHelper;
 
 class MinifyHelper extends AbstractHelper
 {
+    protected $minify;
+    protected $lastMod;
+    
 	public function getRealPublicPath() {
-		return getcwd()."/public";
+		return getcwd()."/public_html";
 	}
 	
 	public function getFilePrefix() {
@@ -15,6 +19,9 @@ class MinifyHelper extends AbstractHelper
 	}
 	
 	public function __invoke($file) {
+        $cache = new Minify_Cache_File();
+        $this->minify = new Minify($cache);
+        
 		// files to minify		
 		$filesToMinify = $this->getFiles($file);
 
@@ -28,9 +35,10 @@ class MinifyHelper extends AbstractHelper
 		$finalMinifyName = $this->fileExists($pathMinify."/".$this->getFilePrefix().$hash."*");
 		
 		// create minified file
-		if(! $finalMinifyName) {
-			$finalMinifyName = $this->getFilePrefix().$hash."-".uniqid().".".$this->getFilesExtension($filesToMinify);
-			file_put_contents($pathMinify."/".$finalMinifyName, Minify::combine($filesToMinify));
+		if(! $finalMinifyName || filemtime($pathMinify."/".$finalMinifyName) < $this->lastMod) {
+			$finalMinifyName = $this->getFilePrefix().$hash.".".$this->getFilesExtension($filesToMinify);
+			file_put_contents($pathMinify."/".$finalMinifyName, $this->minify->combine($filesToMinify));
+                        touch($pathMinify."/".$finalMinifyName, $this->lastMod);
 		}
 
 		return $this->findWebPathMinify($file)."/".$finalMinifyName;
@@ -53,7 +61,6 @@ class MinifyHelper extends AbstractHelper
 	}
 	
 	public function fileExists($file) {
-		
 		$finalMinifyName = false;
 		if(glob($file)) {
 			foreach(glob($file) as $localFile) {
@@ -107,6 +114,10 @@ class MinifyHelper extends AbstractHelper
 			$d->close();
 		}
 		else {
+                    $tmpTimeMod = filemtime($this->getRealPublicPath().$file);
+                    if($tmpTimeMod > $this->lastMod) {
+                        $this->lastMod = $tmpTimeMod;
+                    }
 			$filesToMinify[] = $this->getRealPublicPath().$file;
 		}
 		
